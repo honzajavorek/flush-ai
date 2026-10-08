@@ -93,6 +93,15 @@ async function flushClaude(orgId) {
 }
 
 /**
+ * Strips the prefix from a Claude Code session ID, as the API mixes `session_…` and `cse_…` forms of the same ID.
+ * @param {string} id
+ * @returns {string}
+ */
+function getClaudeCodeSessionKey(id) {
+  return id.replace(/^(session|cse)_/, '');
+}
+
+/**
  * Reads IDs of the Claude Code sessions pinned in the sidebar.
  * @param {string} orgId
  * @returns {Promise<Set<string>>}
@@ -106,7 +115,7 @@ async function getPinnedClaudeCodeSessionIds(orgId) {
   if (entry === undefined) return new Set();
   const starredIds = JSON.parse(entry).state?.starredIds;
   if (!Array.isArray(starredIds)) throw new Error('Could not read pinned sessions (unexpected format)');
-  return new Set(starredIds);
+  return new Set(starredIds.map(getClaudeCodeSessionKey));
 }
 
 /**
@@ -135,26 +144,31 @@ async function flushClaudeCode(orgId) {
       const data = await response.json();
       const page = data.data || [];
       const sizeBefore = sessions.size;
-      page.forEach((session) => sessions.set(session.id, session));
+      page.forEach((session) => sessions.set(getClaudeCodeSessionKey(session.id), session));
       // Stops when a page brings nothing new, in case the token doesn't advance
       resumeToken = page.length && sessions.size > sizeBefore ? data.resume_token : null;
     } while (resumeToken);
   }
 
   const allSessions = [...sessions.values()];
-  const toDelete = allSessions.filter((session) => !pinnedIds.has(session.id));
+  const toDelete = allSessions.filter((session) => !pinnedIds.has(getClaudeCodeSessionKey(session.id)));
   const skipped = allSessions.length - toDelete.length;
   if (!toDelete.length) {
     alert(`Nothing to delete (found ${allSessions.length})`);
     return;
   }
-  if (!confirm(`Delete ${toDelete.length} Claude Code sessions?\nSkipping ${skipped} pinned.\n\nThis cannot be undone.`)) {
+  // Shows both counts, so it's visible when pinned sessions fail to match the listed ones
+  if (!confirm(`Delete ${toDelete.length} Claude Code sessions?\nSkipping ${skipped} pinned (${pinnedIds.size} pinned in settings).\n\nThis cannot be undone.`)) {
     return;
   }
 
   const [succeeded, failed] = await deleteAll(
     toDelete,
-    (session) => fetch(`/v1/code/sessions/${session.id}`, { method: 'DELETE', headers, body: '{}' }),
+    (session) => fetch(`/v1/code/sessions/session_${getClaudeCodeSessionKey(session.id)}`, {
+      method: 'DELETE',
+      headers,
+      body: '{}',
+    }),
     'claude code',
   );
   alert(`Deleted ${succeeded}, failed ${failed}, skipped ${skipped} pinned.`);

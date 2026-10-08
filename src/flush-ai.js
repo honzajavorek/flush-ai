@@ -100,7 +100,7 @@ async function flushClaude(orgId) {
 async function getPinnedClaudeCodeSessionIds(orgId) {
   const response = await fetch(`/api/claude_code/organizations/${orgId}/user_settings`);
   if (!response.ok) throw new Error(`Could not read pinned sessions (HTTP ${response.status})`);
-  const { entries } = await response.json();
+  const entries = (await response.json()).content?.entries;
   if (!entries || typeof entries !== 'object') throw new Error('Could not read pinned sessions (unexpected format)');
   const entry = entries['ccd/dframe-starred-code'];
   if (entry === undefined) return new Set();

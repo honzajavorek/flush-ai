@@ -1,17 +1,30 @@
-// Deletes all your AI chat sessions except the pinned (starred) ones.
-// Supported: ChatGPT (chats and Codex tasks), Claude.
-
 const DELAY_MS = 800;
 
+/**
+ * Waits for the given number of milliseconds.
+ * @param {number} ms
+ * @returns {Promise<void>}
+ */
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Reads a cookie value by name.
+ * @param {string} name
+ * @returns {string | undefined}
+ */
 function getCookie(name) {
   return document.cookie.match(new RegExp(`${name}=([^;]+)`))?.[1];
 }
 
-// Deletes items one by one, pausing between requests to avoid rate limits.
+/**
+ * Deletes items one by one, pausing between requests to avoid rate limits.
+ * @param {object[]} items
+ * @param {(item: object) => Promise<Response>} deleteItem
+ * @param {string} label Prefix for console log lines
+ * @returns {Promise<[number, number]>} Counts of succeeded and failed deletions
+ */
 async function deleteAll(items, deleteItem, label) {
   let succeeded = 0;
   let failed = 0;
@@ -28,6 +41,9 @@ async function deleteAll(items, deleteItem, label) {
   return [succeeded, failed];
 }
 
+/**
+ * Deletes all Claude chats except the starred ones.
+ */
 async function flushClaude() {
   alert('Starting – collecting Claude chats…');
 
@@ -73,10 +89,13 @@ async function flushClaude() {
   alert(`Deleted ${succeeded}, failed ${failed}, skipped ${skipped} starred.`);
 }
 
+/**
+ * Deletes all ChatGPT chats and Codex tasks except the pinned ones.
+ */
 async function flushChatGPT() {
   alert('Starting – collecting chats and tasks…');
 
-  // Codex tasks don't reliably expose pinned state in the API, so also read it from the sidebar.
+  // Codex tasks don't reliably expose pinned state in the API, so also read it from the sidebar
   const pinnedInSidebar = new Set(
     [...document.querySelectorAll('[data-app-action-sidebar-thread-pinned="true"]')]
       .map((element) => (element.dataset.appActionSidebarThreadId || '').split(':').pop()),
@@ -144,18 +163,7 @@ async function flushChatGPT() {
 
   const [chatsSucceeded, chatsFailed] = await deleteAll(
     chatsToDelete,
-    async (chat) => {
-      let response = await fetch(`/backend-api/conversation/id/${chat.id}`, { method: 'DELETE', headers });
-      if (!response.ok) {
-        // Fallback: hide the chat if it cannot be deleted.
-        response = await fetch(`/backend-api/conversation/${chat.id}`, {
-          method: 'PATCH',
-          headers,
-          body: JSON.stringify({ is_visible: false }),
-        });
-      }
-      return response;
-    },
+    (chat) => fetch(`/backend-api/conversation/id/${chat.id}`, { method: 'DELETE', headers }),
     'chat',
   );
   const [tasksSucceeded, tasksFailed] = await deleteAll(
@@ -168,6 +176,9 @@ async function flushChatGPT() {
   );
 }
 
+/**
+ * Runs the flush for the current site and reports any error.
+ */
 async function main() {
   try {
     if (location.hostname.endsWith('claude.ai')) {

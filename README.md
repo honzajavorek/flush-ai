@@ -9,7 +9,7 @@ Click the button while in an AI chat interface and it goes through your past ses
 
 - Runs in the page and uses the chat's own internal API with your logged-in session.
 - **Claude:** lists all chats, keeps starred ones, deletes the rest.
-- **ChatGPT:** lists all chats and Codex tasks, keeps pinned ones, deletes the rest. If a chat can't be deleted, it's hidden instead.
+- **ChatGPT:** lists all chats and Codex tasks, keeps pinned ones, deletes the rest.
 - Asks for confirmation first, then deletes one by one (800 ms apart) and shows a summary. Details are logged to the browser console.
 - Deletion can't be undone.
 

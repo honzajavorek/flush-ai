@@ -30,6 +30,7 @@ const html = `<!doctype html>
   <p>Drag this button to your bookmarks bar:</p>
   <p><a class="bookmarklet" href="${escapeHtml(bookmarklet)}">Flush AI</a></p>
   <h2>Source</h2>
+  <p>On GitHub: <a href="https://github.com/honzajavorek/flush-ai">honzajavorek/flush-ai</a></p>
   <pre><code>${escapeHtml(source)}</code></pre>
 </body>
 </html>

@@ -42,20 +42,23 @@ async function deleteAll(items, deleteItem, label) {
 }
 
 /**
- * Deletes all Claude chats except the starred ones.
+ * Finds the ID of the current Claude organization.
+ * @returns {Promise<string | undefined>}
  */
-async function flushClaude() {
+async function getClaudeOrgId() {
+  const orgId = getCookie('lastActiveOrg');
+  if (orgId) return orgId;
+  const orgs = await (await fetch('/api/organizations')).json();
+  return orgs[0]?.uuid;
+}
+
+/**
+ * Deletes all Claude chats except the starred ones.
+ * @param {string} orgId
+ */
+async function flushClaude(orgId) {
   alert('Starting – collecting Claude chats…');
 
-  let orgId = getCookie('lastActiveOrg');
-  if (!orgId) {
-    const orgs = await (await fetch('/api/organizations')).json();
-    orgId = orgs[0]?.uuid;
-  }
-  if (!orgId) {
-    alert('No organization found');
-    return;
-  }
   const conversationsUrl = `/api/organizations/${orgId}/chat_conversations`;
 
   const PAGE_SIZE = 100;
@@ -87,6 +90,74 @@ async function flushClaude() {
     'claude',
   );
   alert(`Deleted ${succeeded}, failed ${failed}, skipped ${skipped} starred.`);
+}
+
+/**
+ * Reads IDs of the Claude Code sessions pinned in the sidebar.
+ * @param {string} orgId
+ * @returns {Promise<Set<string>>}
+ */
+async function getPinnedClaudeCodeSessionIds(orgId) {
+  const response = await fetch(`/api/claude_code/organizations/${orgId}/user_settings`);
+  if (!response.ok) throw new Error(`Could not read pinned sessions (HTTP ${response.status})`);
+  const entries = (await response.json()).content?.entries;
+  if (!entries || typeof entries !== 'object') throw new Error('Could not read pinned sessions (unexpected format)');
+  const entry = entries['ccd/dframe-starred-code'];
+  if (entry === undefined) return new Set();
+  const starredIds = JSON.parse(entry).state?.starredIds;
+  if (!Array.isArray(starredIds)) throw new Error('Could not read pinned sessions (unexpected format)');
+  return new Set(starredIds);
+}
+
+/**
+ * Deletes all Claude Code sessions, including archived ones, except the pinned ones.
+ * @param {string} orgId
+ */
+async function flushClaudeCode(orgId) {
+  alert('Starting – collecting Claude Code sessions…');
+
+  // Fails rather than returning nothing, so pinned sessions never get deleted by accident
+  const pinnedIds = await getPinnedClaudeCodeSessionIds(orgId);
+
+  const headers = {
+    'anthropic-beta': 'ccr-byoc-2025-07-29',
+    'anthropic-version': '2023-06-01',
+    'content-type': 'application/json',
+    'x-organization-uuid': orgId,
+  };
+  const sessions = new Map();
+  for (const statuses of ['statuses=active&statuses=paused', 'statuses=archived']) {
+    let resumeToken = null;
+    do {
+      const tokenParam = resumeToken ? `&resume_token=${encodeURIComponent(resumeToken)}` : '';
+      const response = await fetch(`/v1/code/sessions?${statuses}&limit=100${tokenParam}`, { headers });
+      if (!response.ok) throw new Error(`Could not list sessions (HTTP ${response.status})`);
+      const data = await response.json();
+      const page = data.data || [];
+      const sizeBefore = sessions.size;
+      page.forEach((session) => sessions.set(session.id, session));
+      // Stops when a page brings nothing new, in case the token doesn't advance
+      resumeToken = page.length && sessions.size > sizeBefore ? data.resume_token : null;
+    } while (resumeToken);
+  }
+
+  const allSessions = [...sessions.values()];
+  const toDelete = allSessions.filter((session) => !pinnedIds.has(session.id));
+  const skipped = allSessions.length - toDelete.length;
+  if (!toDelete.length) {
+    alert(`Nothing to delete (found ${allSessions.length})`);
+    return;
+  }
+  if (!confirm(`Delete ${toDelete.length} Claude Code sessions?\nSkipping ${skipped} pinned.\n\nThis cannot be undone.`)) {
+    return;
+  }
+
+  const [succeeded, failed] = await deleteAll(
+    toDelete,
+    (session) => fetch(`/v1/code/sessions/${session.id}`, { method: 'DELETE', headers, body: '{}' }),
+    'claude code',
+  );
+  alert(`Deleted ${succeeded}, failed ${failed}, skipped ${skipped} pinned.`);
 }
 
 /**
@@ -182,7 +253,16 @@ async function flushChatGPT() {
 async function main() {
   try {
     if (location.hostname.endsWith('claude.ai')) {
-      await flushClaude();
+      const orgId = await getClaudeOrgId();
+      if (!orgId) {
+        alert('No organization found');
+        return;
+      }
+      if (location.pathname.startsWith('/code')) {
+        await flushClaudeCode(orgId);
+      } else {
+        await flushClaude(orgId);
+      }
     } else {
       await flushChatGPT();
     }

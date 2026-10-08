@@ -26,7 +26,7 @@ const html = `<!doctype html>
 </head>
 <body>
   <h1>flush-ai 🚽</h1>
-  <p>Click the button while in an AI chat interface and it goes through your past sessions and deletes them all, except the pinned ones. Supported chats: ChatGPT (incl. Codex tasks), Claude.</p>
+  <p>Click the button while in an AI chat interface and it goes through your past sessions and deletes them all, except the pinned ones. Supported chats: ChatGPT (incl. Codex tasks), Claude, Claude Code.</p>
   <p>Drag this button to your bookmarks bar:</p>
   <p><a class="bookmarklet" href="${escapeHtml(bookmarklet)}">Flush AI</a></p>
   <h2>Source</h2>
